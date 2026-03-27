@@ -1,0 +1,1 @@
+export { BloomPass } from "./BloomPass";
