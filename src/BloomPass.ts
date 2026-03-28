@@ -6,6 +6,7 @@ export interface BloomPassOptions {
   radius?: number;
   intensity?: number;
   iterations?: number;
+  scale?: number;
 }
 
 export class BloomPass extends PostPass {
@@ -38,9 +39,10 @@ export class BloomPass extends PostPass {
 
     this.options = {
       threshold: options.threshold ?? 0.5,
-      radius: options.radius ?? 12,
+      radius: options.radius ?? 8,
       intensity: options.intensity ?? 1.0,
-      iterations: options.iterations ?? 4,
+      iterations: options.iterations ?? 2,
+      scale: options.scale ?? 0.5,
     };
 
     const shaderModule = device.createShaderModule({ code: shader });
@@ -145,19 +147,22 @@ export class BloomPass extends PostPass {
   }
 
   private createRenderTargets(width: number, height: number): void {
-    if (this.lastWidth === width && this.lastHeight === height) return;
+    const scaledWidth = Math.floor(width * this.options.scale);
+    const scaledHeight = Math.floor(height * this.options.scale);
 
-    this.lastWidth = width;
-    this.lastHeight = height;
+    if (this.lastWidth === scaledWidth && this.lastHeight === scaledHeight) return;
+
+    this.lastWidth = scaledWidth;
+    this.lastHeight = scaledHeight;
 
     if (this.thresholdTexture) this.thresholdTexture.destroy();
     if (this.blurTextureA) this.blurTextureA.destroy();
     if (this.blurTextureB) this.blurTextureB.destroy();
 
-    const createTexture = (label: string) =>
+    const createTexture = (label: string, w: number, h: number) =>
       this.device.createTexture({
         label,
-        size: [width, height],
+        size: [w, h],
         format: "rgba16float",
         usage:
           GPUTextureUsage.TEXTURE_BINDING |
@@ -166,13 +171,13 @@ export class BloomPass extends PostPass {
           GPUTextureUsage.COPY_DST,
       });
 
-    this.thresholdTexture = createTexture("Bloom Threshold Texture");
+    this.thresholdTexture = createTexture("Bloom Threshold Texture", scaledWidth, scaledHeight);
     this.thresholdView = this.thresholdTexture.createView();
 
-    this.blurTextureA = createTexture("Bloom Blur Texture A");
+    this.blurTextureA = createTexture("Bloom Blur Texture A", scaledWidth, scaledHeight);
     this.blurViewA = this.blurTextureA.createView();
 
-    this.blurTextureB = createTexture("Bloom Blur Texture B");
+    this.blurTextureB = createTexture("Bloom Blur Texture B", scaledWidth, scaledHeight);
     this.blurViewB = this.blurTextureB.createView();
   }
 

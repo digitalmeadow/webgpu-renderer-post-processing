@@ -37,7 +37,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "workspace:*"
+    "@digitalmeadow/webgpu-renderer": "0.0.3"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
