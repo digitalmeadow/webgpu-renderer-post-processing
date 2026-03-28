@@ -80,6 +80,11 @@ export class BloomPass extends PostPass {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "float", viewDimension: "2d" },
         },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
       ],
     });
 
@@ -193,6 +198,7 @@ export class BloomPass extends PostPass {
     const commandEncoder = this.device.createCommandEncoder();
 
     const gbufferView = context.geometryBuffer.metalRoughnessView;
+    const emissiveView = context.geometryBuffer.emissiveView;
 
     const gbufferBindGroup = this.device.createBindGroup({
       label: "Bloom G-Buffer Bind Group",
@@ -203,6 +209,7 @@ export class BloomPass extends PostPass {
         { binding: 2, resource: input },
         { binding: 3, resource: { buffer: this.uniformsBuffer } },
         { binding: 4, resource: input },
+        { binding: 5, resource: emissiveView },
       ],
     });
 
@@ -236,6 +243,7 @@ export class BloomPass extends PostPass {
           { binding: 2, resource: readView },
           { binding: 3, resource: { buffer: this.uniformsBuffer } },
           { binding: 4, resource: input },
+          { binding: 5, resource: emissiveView },
         ],
       });
 
@@ -270,6 +278,7 @@ export class BloomPass extends PostPass {
         { binding: 2, resource: readView },
         { binding: 3, resource: { buffer: this.uniformsBuffer } },
         { binding: 4, resource: input },
+        { binding: 5, resource: emissiveView },
       ],
     });
 

@@ -10,6 +10,7 @@ struct BloomUniforms {
 @group(0) @binding(2) var blurred_texture: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> bloom_uniforms: BloomUniforms;
 @group(0) @binding(4) var scene_texture: texture_2d<f32>;
+@group(0) @binding(5) var gbuffer_emissive: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -44,21 +45,26 @@ fn get_emissive_intensity() -> f32 {
 @fragment
 fn fs_threshold(in: VertexOutput) -> @location(0) vec4<f32> {
     let scene_color = textureSample(scene_texture, inputSampler, in.uv_coords);
-    let metal_rough = textureSample(gbuffer_metallic_roughness, inputSampler, in.uv_coords);
-    let emissive_intensity = metal_rough.a;
+    let emissive = textureSample(gbuffer_emissive, inputSampler, in.uv_coords);
+    let emissive_intensity = emissive.a;
+    let emissive_rgb = emissive.rgb;
 
     let lum = luminance(scene_color.rgb);
     let threshold = bloom_uniforms.threshold;
 
     var intensity = 0.0;
+    var output_color = vec3<f32>(0.0);
+    
     if (emissive_intensity > 0.0) {
         intensity = emissive_intensity;
+        output_color = emissive_rgb;
     } else if (lum > threshold) {
         intensity = lum - threshold;
+        output_color = scene_color.rgb;
     }
 
     if (intensity > 0.0) {
-        return vec4<f32>(scene_color.rgb * intensity, 1.0);
+        return vec4<f32>(output_color * intensity, 1.0);
     }
 
     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -95,8 +101,10 @@ fn fs_blur(in: VertexOutput) -> @location(0) vec4<f32> {
 fn fs_composite(in: VertexOutput) -> @location(0) vec4<f32> {
     let scene_color = textureSample(scene_texture, inputSampler, in.uv_coords);
     let bloom_color = textureSample(blurred_texture, inputSampler, in.uv_coords);
+    let emissive = textureSample(gbuffer_emissive, inputSampler, in.uv_coords);
 
-    let final_color = scene_color.rgb + bloom_color.rgb * bloom_uniforms.intensity;
+    let bloom_contribution = bloom_color.rgb + emissive.rgb * emissive.a;
+    let final_color = scene_color.rgb + bloom_contribution * bloom_uniforms.intensity;
 
     return vec4<f32>(final_color, 1.0);
 }
