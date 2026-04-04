@@ -133,7 +133,7 @@ export class BloomPass extends PostPass {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_composite",
-        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }],
+        targets: [{ format: "rgba16float" }],
       },
       primitive: { topology: "triangle-list" },
     });
@@ -150,7 +150,8 @@ export class BloomPass extends PostPass {
     const scaledWidth = Math.floor(width * this.options.scale);
     const scaledHeight = Math.floor(height * this.options.scale);
 
-    if (this.lastWidth === scaledWidth && this.lastHeight === scaledHeight) return;
+    if (this.lastWidth === scaledWidth && this.lastHeight === scaledHeight)
+      return;
 
     this.lastWidth = scaledWidth;
     this.lastHeight = scaledHeight;
@@ -171,13 +172,25 @@ export class BloomPass extends PostPass {
           GPUTextureUsage.COPY_DST,
       });
 
-    this.thresholdTexture = createTexture("Bloom Threshold Texture", scaledWidth, scaledHeight);
+    this.thresholdTexture = createTexture(
+      "Bloom Threshold Texture",
+      scaledWidth,
+      scaledHeight,
+    );
     this.thresholdView = this.thresholdTexture.createView();
 
-    this.blurTextureA = createTexture("Bloom Blur Texture A", scaledWidth, scaledHeight);
+    this.blurTextureA = createTexture(
+      "Bloom Blur Texture A",
+      scaledWidth,
+      scaledHeight,
+    );
     this.blurViewA = this.blurTextureA.createView();
 
-    this.blurTextureB = createTexture("Bloom Blur Texture B", scaledWidth, scaledHeight);
+    this.blurTextureB = createTexture(
+      "Bloom Blur Texture B",
+      scaledWidth,
+      scaledHeight,
+    );
     this.blurViewB = this.blurTextureB.createView();
   }
 

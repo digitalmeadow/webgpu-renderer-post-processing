@@ -1,11 +1,12 @@
-import shader from "./FilmGrainPass.wgsl?raw";
+import shader from "./TonemapPass.wgsl?raw";
 import { PostPass, PostPassContext } from "@digitalmeadow/webgpu-renderer";
 
-export interface FilmGrainPassOptions {
-  intensity?: number;
+export interface TonemapPassOptions {
+  /** Scene exposure multiplier applied before tonemapping. Default: 1.0 */
+  exposure?: number;
 }
 
-export class FilmGrainPass extends PostPass {
+export class TonemapPass extends PostPass {
   private device: GPUDevice;
 
   private pipeline: GPURenderPipeline;
@@ -13,20 +14,20 @@ export class FilmGrainPass extends PostPass {
   private uniformsBuffer: GPUBuffer;
   private bindGroupLayout: GPUBindGroupLayout;
 
-  private options: Required<FilmGrainPassOptions>;
-  private time: number = 0;
-  private lastWidth: number = 0;
-  private lastHeight: number = 0;
+  private options: Required<TonemapPassOptions>;
 
-  constructor(device: GPUDevice, options: FilmGrainPassOptions = {}) {
+  constructor(device: GPUDevice, options: TonemapPassOptions = {}) {
     super();
     this.device = device;
 
     this.options = {
-      intensity: options.intensity ?? 0.15,
+      exposure: options.exposure ?? 1.0,
     };
 
-    const shaderModule = device.createShaderModule({ code: shader });
+    const shaderModule = device.createShaderModule({
+      label: "Tonemap Pass Shader",
+      code: shader,
+    });
 
     this.sampler = device.createSampler({
       magFilter: "linear",
@@ -36,7 +37,7 @@ export class FilmGrainPass extends PostPass {
     });
 
     this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Film Grain Pass Bind Group Layout",
+      label: "Tonemap Pass Bind Group Layout",
       entries: [
         {
           binding: 0,
@@ -57,8 +58,8 @@ export class FilmGrainPass extends PostPass {
     });
 
     this.uniformsBuffer = device.createBuffer({
-      label: "Film Grain Pass Uniforms",
-      size: 16,
+      label: "Tonemap Pass Uniforms",
+      size: 16, // 4 x f32 (exposure + 3 padding)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -67,7 +68,7 @@ export class FilmGrainPass extends PostPass {
     });
 
     this.pipeline = device.createRenderPipeline({
-      label: "Film Grain Pass Pipeline",
+      label: "Tonemap Pass Pipeline",
       layout: pipelineLayout,
       vertex: { module: shaderModule, entryPoint: "vs_main" },
       fragment: {
@@ -79,21 +80,27 @@ export class FilmGrainPass extends PostPass {
     });
   }
 
+  get exposure(): number {
+    return this.options.exposure;
+  }
+
+  set exposure(value: number) {
+    this.options.exposure = value;
+  }
+
   render(
     input: GPUTextureView,
     output: GPUTextureView,
-    context: PostPassContext,
+    _context: PostPassContext,
   ): void {
-    this.time += 0.016;
-
     this.device.queue.writeBuffer(
       this.uniformsBuffer,
       0,
-      new Float32Array([this.options.intensity, this.time, 0, 0]),
+      new Float32Array([this.options.exposure, 0, 0, 0]),
     );
 
     const bindGroup = this.device.createBindGroup({
-      label: "Film Grain Bind Group",
+      label: "Tonemap Pass Bind Group",
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: this.sampler },
@@ -102,10 +109,12 @@ export class FilmGrainPass extends PostPass {
       ],
     });
 
-    const commandEncoder = this.device.createCommandEncoder();
+    const commandEncoder = this.device.createCommandEncoder({
+      label: "Tonemap Pass Encoder",
+    });
 
     const pass = commandEncoder.beginRenderPass({
-      label: "Film Grain Pass",
+      label: "Tonemap Render Pass",
       colorAttachments: [
         {
           view: output,
@@ -124,7 +133,7 @@ export class FilmGrainPass extends PostPass {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
-  resize(width: number, height: number): void {
-    // No render targets to resize for this pass
+  resize(_width: number, _height: number): void {
+    // No internal render targets to resize
   }
 }
