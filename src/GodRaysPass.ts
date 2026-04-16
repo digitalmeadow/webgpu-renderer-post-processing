@@ -8,12 +8,14 @@ export interface GodRaysPassOptions {
   decay?: number;
   exposure?: number;
   maxRayLength?: number;
+  occlusionSmoothness?: number;
 }
 
 export class GodRaysPass extends PostPass {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private sampler: GPUSampler;
+  private comparisonSampler: GPUSampler; // For occlusion depth comparison with bilinear filtering
   private uniformsBuffer: GPUBuffer;
   private bindGroupLayout: GPUBindGroupLayout;
   private occlusionView: GPUTextureView | null;
@@ -37,6 +39,7 @@ export class GodRaysPass extends PostPass {
       decay: options.decay ?? 0.95,
       exposure: options.exposure ?? 1.0,
       maxRayLength: options.maxRayLength ?? 1.0,
+      occlusionSmoothness: options.occlusionSmoothness ?? 0.01,
     };
 
     // Use provided occlusion texture or create a dummy 1x1 white texture
@@ -73,6 +76,15 @@ export class GodRaysPass extends PostPass {
       addressModeV: "clamp-to-edge",
     });
 
+    // Comparison sampler for hardware-filtered occlusion testing
+    this.comparisonSampler = device.createSampler({
+      compare: "less", // Enables depth comparison mode
+      magFilter: "linear", // Bilinear filtering on comparison results
+      minFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+    });
+
     this.bindGroupLayout = device.createBindGroupLayout({
       label: "God Rays Pass Bind Group Layout",
       entries: [
@@ -100,6 +112,11 @@ export class GodRaysPass extends PostPass {
           binding: 4,
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "depth", viewDimension: "2d" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "comparison" },
         },
       ],
     });
@@ -167,6 +184,12 @@ export class GodRaysPass extends PostPass {
   set maxRayLength(value: number) {
     this.options.maxRayLength = value;
   }
+  get occlusionSmoothness(): number {
+    return this.options.occlusionSmoothness;
+  }
+  set occlusionSmoothness(value: number) {
+    this.options.occlusionSmoothness = Math.max(0.0001, value);
+  }
 
   render(
     input: GPUTextureView,
@@ -187,7 +210,7 @@ export class GodRaysPass extends PostPass {
         this.options.decay,
         this.options.exposure,
         this.options.maxRayLength,
-        0,
+        this.options.occlusionSmoothness,
         0,
       ]),
     );
@@ -201,6 +224,7 @@ export class GodRaysPass extends PostPass {
         { binding: 2, resource: this.occlusionView! },
         { binding: 3, resource: { buffer: this.uniformsBuffer } },
         { binding: 4, resource: context.geometryBuffer.depthView },
+        { binding: 5, resource: this.comparisonSampler },
       ],
     });
 

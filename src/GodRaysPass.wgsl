@@ -8,8 +8,8 @@ struct GodRaysUniforms {
     decay: f32,
     exposure: f32,
     max_ray_length: f32,
+    occlusion_smoothness: f32,
     padding: f32,
-    padding2: f32,
 }
 
 struct CameraUniforms {
@@ -44,6 +44,7 @@ struct LightDirectionalUniformsArray {
 @group(0) @binding(2) var occlusion_texture: texture_depth_2d;
 @group(0) @binding(3) var<uniform> uniforms: GodRaysUniforms;
 @group(0) @binding(4) var scene_depth_texture: texture_depth_2d;
+@group(0) @binding(5) var comparisonSampler: sampler_comparison;
 
 // Group 1: Camera uniforms
 @group(1) @binding(0) var<uniform> camera: CameraUniforms;
@@ -137,19 +138,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     for (var i: i32 = 0; i < uniforms.num_samples; i++) {
         sample_pos += step_vector;
         
-        // Clamp sample position to screen bounds
-        if (sample_pos.x < 0.0 || sample_pos.x > 1.0 || sample_pos.y < 0.0 || sample_pos.y > 1.0) {
-            continue;
-        }
-        
-        // 1. Load scene depth at this screen position
-        let scene_tex_size = textureDimensions(scene_depth_texture);
-        let depth_coord = vec2<i32>(sample_pos * vec2<f32>(scene_tex_size));
-        let scene_depth = textureLoad(scene_depth_texture, depth_coord, 0);
-        
-        // Skip sky pixels (depth = 1.0 means no geometry)
-        // Sky should contribute to god rays since light travels through atmosphere
-        let is_sky = scene_depth >= 0.9999;
+        // 1. Sample scene depth (depth textures require textureLoad, not textureSample)
+        // MUST be in uniform control flow - sample first, check bounds later
+        let depth_texture_size = textureDimensions(scene_depth_texture);
+        let depth_texel_coords = vec2<i32>(sample_pos * vec2<f32>(depth_texture_size));
+        let scene_depth = textureLoad(scene_depth_texture, depth_texel_coords, 0);
         
         // 2. Reconstruct 3D world position from screen UV + depth
         let world_pos = screen_to_world(sample_pos, scene_depth);
@@ -157,36 +150,55 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // 3. Project to light space for occlusion testing
         let light_uv = world_to_light_space(world_pos);
         
-        // 4. Sample occlusion depth
-        let occlusion_size = textureDimensions(occlusion_texture);
-        let clamped_uv = clamp(light_uv, vec2(0.0), vec2(1.0));
-        let occlusion_coord = vec2<i32>(clamped_uv * vec2<f32>(occlusion_size));
-        let occlusion_depth = textureLoad(occlusion_texture, occlusion_coord, 0);
-        
-        // 5. Check if within valid bounds
-        let in_bounds = light_uv.x >= 0.0 && light_uv.x <= 1.0 && 
-                         light_uv.y >= 0.0 && light_uv.y <= 1.0;
-        
-        // 6. Calculate light space depth of current world position
-        let light = lights.lights[0];
+        // 4. Calculate light space depth of current world position
         let light_space_pos = light.view_projection_matrices[0] * vec4<f32>(world_pos, 1.0);
         let light_ndc_depth = (light_space_pos.z / light_space_pos.w) * 0.5 + 0.5;
         
-        // 7. Occlusion test: world position should be at or in front of occlusion surface
-        // Add small bias to prevent self-shadowing artifacts
+        // 5. Hardware-filtered occlusion test using comparison sampler
+        // textureSampleCompare performs: sample 4 texels → compare each → bilinear filter results
+        // MUST be in uniform control flow - sample first, check bounds later
         let bias = 0.001;
-        let is_occluded = in_bounds && (occlusion_depth - bias < light_ndc_depth) && !is_sky;
+        let clamped_uv = clamp(light_uv, vec2(0.0), vec2(1.0));
         
-        // 8. Atmospheric scattering contribution (only in empty space)
+        // Returns percentage of samples passing depth test (0.0-1.0)
+        // Already bilinearly filtered by hardware - smooth transitions automatically!
+        let occlusion_comparison_result = textureSampleCompare(
+            occlusion_texture,
+            comparisonSampler,
+            clamped_uv,
+            light_ndc_depth - bias
+        );
+        
+        // 6. Check bounds AFTER sampling (enables uniform control flow)
+        let in_screen_bounds = sample_pos.x >= 0.0 && sample_pos.x <= 1.0 && 
+                                sample_pos.y >= 0.0 && sample_pos.y <= 1.0;
+        let in_light_bounds = light_uv.x >= 0.0 && light_uv.x <= 1.0 && 
+                               light_uv.y >= 0.0 && light_uv.y <= 1.0;
+        
+        // INVERTED LOGIC: God rays appear where light is BLOCKED, not where it's visible
+        // occlusion_comparison_result: 1.0 = visible (no occlusion), 0.0 = occluded (in shadow)
+        // We want rays where occluded, so invert: 1.0 - result
+        let shadow_factor = 1.0 - occlusion_comparison_result;
+        let occlusion_factor = smoothstep(0.0, uniforms.occlusion_smoothness, shadow_factor);
+        
+        // 7. Atmospheric scattering parameters
+        // Decay: disabled for debugging (set to 1.0 for uniform intensity along rays)
         let decay_factor = pow(uniforms.decay, f32(i));
         
-        // Only contribute atmospheric light in sky areas that aren't occluded
-        // This eliminates geometry ghosting by not sampling scene colors
-        if (is_sky && !is_occluded) {
-            // Pure atmospheric scattering - no scene color sampling
-            let atmospheric_intensity = 1.0;
-            illumination += atmospheric_intensity * uniforms.weight * decay_factor;
-        }
+        // Atmospheric thickness: disabled for debugging (set to 1.0 for full intensity)
+        // When enabled, fades rays near geometry surfaces
+        let distance_from_geometry = scene_depth;
+        // let atmospheric_thickness = smoothstep(0.995, 1.0, distance_from_geometry);
+        let atmospheric_thickness = 1.0; // DEBUGGING: Full intensity, no depth-based falloff
+        
+        // Combine atmospheric thickness with smooth occlusion gradient
+        let contribution = atmospheric_thickness * occlusion_factor;
+        
+        // Use select() to mask out invalid samples (preserves uniform control flow)
+        let valid_contribution = select(0.0, contribution, in_screen_bounds && in_light_bounds);
+        
+        // Accumulate valid contributions
+        illumination += valid_contribution * uniforms.weight * decay_factor;
     }
     
     let god_rays_intensity = illumination * uniforms.density * uniforms.exposure;
