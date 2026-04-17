@@ -3,6 +3,8 @@ export { FilmGrainPass } from "./FilmGrainPass";
 export { TonemapPass } from "./TonemapPass";
 export { FilmicGradePass } from "./FilmicGradePass";
 export { GodRaysPass } from "./GodRaysPass";
+export { DirectionalVolumetricPass } from "./DirectionalVolumetricPass";
 export type { TonemapPassOptions } from "./TonemapPass";
 export type { FilmicGradePassOptions } from "./FilmicGradePass";
 export type { GodRaysPassOptions } from "./GodRaysPass";
+export type { DirectionalVolumetricPassOptions } from "./DirectionalVolumetricPass";
