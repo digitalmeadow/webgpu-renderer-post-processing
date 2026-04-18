@@ -3,66 +3,38 @@ import { PostPass, PostPassContext } from "@digitalmeadow/webgpu-renderer";
 
 export interface GodRaysPassOptions {
   numSamples?: number;
-  density?: number;
-  weight?: number;
+  intensity?: number;
   decay?: number;
-  exposure?: number;
-  maxRayLength?: number;
-  occlusionSmoothness?: number;
+  maxRayDistance?: number;
+  sunRadius?: number;
+  angleFalloff?: number;
 }
 
 export class GodRaysPass extends PostPass {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private sampler: GPUSampler;
-  private comparisonSampler: GPUSampler; // For occlusion depth comparison with bilinear filtering
   private uniformsBuffer: GPUBuffer;
   private bindGroupLayout: GPUBindGroupLayout;
-  private occlusionView: GPUTextureView | null;
-  private dummyOcclusionTexture: GPUTexture | null = null;
   private options: Required<GodRaysPassOptions>;
 
   constructor(
     device: GPUDevice,
     cameraBindGroupLayout: GPUBindGroupLayout,
     lightingBindGroupLayout: GPUBindGroupLayout,
-    occlusionTextureView: GPUTextureView | null,
     options: GodRaysPassOptions = {},
   ) {
     super();
     this.device = device;
 
     this.options = {
-      numSamples: options.numSamples ?? 64,
-      density: options.density ?? 0.8,
-      weight: options.weight ?? 0.3,
+      numSamples: options.numSamples ?? 32,
+      intensity: options.intensity ?? 1.0,
       decay: options.decay ?? 0.95,
-      exposure: options.exposure ?? 1.0,
-      maxRayLength: options.maxRayLength ?? 1.0,
-      occlusionSmoothness: options.occlusionSmoothness ?? 0.01,
+      maxRayDistance: options.maxRayDistance ?? 1.0,
+      sunRadius: options.sunRadius ?? 0.1,
+      angleFalloff: options.angleFalloff ?? 0.8,
     };
-
-    // Use provided occlusion texture or create a dummy 1x1 white texture
-    if (occlusionTextureView) {
-      this.occlusionView = occlusionTextureView;
-    } else {
-      // Create dummy 1x1 texture with max depth (no occlusion)
-      this.dummyOcclusionTexture = device.createTexture({
-        label: "God Rays Dummy Occlusion Texture",
-        size: [1, 1],
-        format: "depth32float",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-      });
-      this.occlusionView = this.dummyOcclusionTexture.createView();
-      // Write max depth value (1.0)
-      const depthData = new Float32Array([1.0]);
-      device.queue.writeTexture(
-        { texture: this.dummyOcclusionTexture },
-        depthData,
-        { bytesPerRow: 4 },
-        [1, 1],
-      );
-    }
 
     const shaderModule = device.createShaderModule({
       label: "God Rays Pass Shader",
@@ -71,15 +43,6 @@ export class GodRaysPass extends PostPass {
 
     this.sampler = device.createSampler({
       magFilter: "linear",
-      minFilter: "linear",
-      addressModeU: "clamp-to-edge",
-      addressModeV: "clamp-to-edge",
-    });
-
-    // Comparison sampler for hardware-filtered occlusion testing
-    this.comparisonSampler = device.createSampler({
-      compare: "less", // Enables depth comparison mode
-      magFilter: "linear", // Bilinear filtering on comparison results
       minFilter: "linear",
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",
@@ -108,22 +71,12 @@ export class GodRaysPass extends PostPass {
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
-        {
-          binding: 4,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "depth", viewDimension: "2d" },
-        },
-        {
-          binding: 5,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "comparison" },
-        },
       ],
     });
 
     this.uniformsBuffer = device.createBuffer({
       label: "God Rays Pass Uniforms",
-      size: 32,
+      size: 24,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -154,17 +107,11 @@ export class GodRaysPass extends PostPass {
   set numSamples(value: number) {
     this.options.numSamples = Math.max(1, Math.floor(value));
   }
-  get density(): number {
-    return this.options.density;
+  get intensity(): number {
+    return this.options.intensity;
   }
-  set density(value: number) {
-    this.options.density = value;
-  }
-  get weight(): number {
-    return this.options.weight;
-  }
-  set weight(value: number) {
-    this.options.weight = value;
+  set intensity(value: number) {
+    this.options.intensity = value;
   }
   get decay(): number {
     return this.options.decay;
@@ -172,23 +119,23 @@ export class GodRaysPass extends PostPass {
   set decay(value: number) {
     this.options.decay = value;
   }
-  get exposure(): number {
-    return this.options.exposure;
+  get maxRayDistance(): number {
+    return this.options.maxRayDistance;
   }
-  set exposure(value: number) {
-    this.options.exposure = value;
+  set maxRayDistance(value: number) {
+    this.options.maxRayDistance = value;
   }
-  get maxRayLength(): number {
-    return this.options.maxRayLength;
+  get sunRadius(): number {
+    return this.options.sunRadius;
   }
-  set maxRayLength(value: number) {
-    this.options.maxRayLength = value;
+  set sunRadius(value: number) {
+    this.options.sunRadius = Math.max(0.0, value);
   }
-  get occlusionSmoothness(): number {
-    return this.options.occlusionSmoothness;
+  get angleFalloff(): number {
+    return this.options.angleFalloff;
   }
-  set occlusionSmoothness(value: number) {
-    this.options.occlusionSmoothness = Math.max(0.0001, value);
+  set angleFalloff(value: number) {
+    this.options.angleFalloff = Math.max(0.0, Math.min(1.0, value));
   }
 
   render(
@@ -205,13 +152,11 @@ export class GodRaysPass extends PostPass {
       this.uniformsBuffer,
       4,
       new Float32Array([
-        this.options.density,
-        this.options.weight,
+        this.options.intensity,
         this.options.decay,
-        this.options.exposure,
-        this.options.maxRayLength,
-        this.options.occlusionSmoothness,
-        0,
+        this.options.maxRayDistance,
+        this.options.sunRadius,
+        this.options.angleFalloff,
       ]),
     );
 
@@ -221,10 +166,8 @@ export class GodRaysPass extends PostPass {
       entries: [
         { binding: 0, resource: this.sampler },
         { binding: 1, resource: input },
-        { binding: 2, resource: this.occlusionView! },
+        { binding: 2, resource: context.geometryBuffer.depthView },
         { binding: 3, resource: { buffer: this.uniformsBuffer } },
-        { binding: 4, resource: context.geometryBuffer.depthView },
-        { binding: 5, resource: this.comparisonSampler },
       ],
     });
 
