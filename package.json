@@ -1,6 +1,6 @@
 {
   "name": "@digitalmeadow/webgpu-renderer-post-processing",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "type": "module",
   "description": "A post-processing utility for the WebGPU Renderer",
   "author": "Digital Meadow <inbox@digitalmeadow.studio> (https://digitalmeadow.studio)",
@@ -37,7 +37,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "workspace:*"
+    "@digitalmeadow/webgpu-renderer": "0.0.4"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
