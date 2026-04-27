@@ -74,6 +74,7 @@ export class UpscalePass extends PostPass {
   }
 
   render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     context: PostPassContext,
@@ -87,11 +88,7 @@ export class UpscalePass extends PostPass {
       ],
     });
 
-    const commandEncoder = this.device.createCommandEncoder({
-      label: "Upscale Pass Encoder",
-    });
-
-    const pass = commandEncoder.beginRenderPass({
+    const pass = encoder.beginRenderPass({
       label: "Upscale Render Pass",
       colorAttachments: [
         {
@@ -107,7 +104,5 @@ export class UpscalePass extends PostPass {
     pass.setBindGroup(0, bindGroup);
     pass.draw(3);
     pass.end();
-
-    this.device.queue.submit([commandEncoder.finish()]);
   }
 }

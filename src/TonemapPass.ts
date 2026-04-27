@@ -89,6 +89,7 @@ export class TonemapPass extends PostPass {
   }
 
   render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     _context: PostPassContext,
@@ -109,11 +110,7 @@ export class TonemapPass extends PostPass {
       ],
     });
 
-    const commandEncoder = this.device.createCommandEncoder({
-      label: "Tonemap Pass Encoder",
-    });
-
-    const pass = commandEncoder.beginRenderPass({
+    const pass = encoder.beginRenderPass({
       label: "Tonemap Render Pass",
       colorAttachments: [
         {
@@ -130,7 +127,6 @@ export class TonemapPass extends PostPass {
     pass.draw(3);
     pass.end();
 
-    this.device.queue.submit([commandEncoder.finish()]);
   }
 
   resize(_width: number, _height: number): void {

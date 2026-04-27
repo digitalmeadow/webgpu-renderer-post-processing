@@ -143,6 +143,7 @@ export class DirectionalVolumetricPass extends PostPass {
   }
 
   render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     context: PostPassContext,
@@ -176,13 +177,8 @@ export class DirectionalVolumetricPass extends PostPass {
       entries: [{ binding: 0, resource: { buffer: this.uniformsBuffer } }],
     });
 
-    // Create command encoder
-    const commandEncoder = this.device.createCommandEncoder({
-      label: "Directional Volumetric Pass Encoder",
-    });
-
     // Render pass
-    const renderPass = commandEncoder.beginRenderPass({
+    const renderPass = encoder.beginRenderPass({
       label: "Directional Volumetric Pass",
       colorAttachments: [
         {
@@ -202,8 +198,6 @@ export class DirectionalVolumetricPass extends PostPass {
     renderPass.draw(3); // Full-screen triangle
     renderPass.end();
 
-    // Submit command buffer
-    this.device.queue.submit([commandEncoder.finish()]);
   }
 
   resize(_width: number, _height: number): void {

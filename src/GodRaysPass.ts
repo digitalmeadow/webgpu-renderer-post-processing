@@ -139,6 +139,7 @@ export class GodRaysPass extends PostPass {
   }
 
   render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     context: PostPassContext,
@@ -171,11 +172,7 @@ export class GodRaysPass extends PostPass {
       ],
     });
 
-    const commandEncoder = this.device.createCommandEncoder({
-      label: "God Rays Pass Encoder",
-    });
-
-    const pass = commandEncoder.beginRenderPass({
+    const pass = encoder.beginRenderPass({
       label: "God Rays Render Pass",
       colorAttachments: [
         {
@@ -194,7 +191,6 @@ export class GodRaysPass extends PostPass {
     pass.draw(3);
     pass.end();
 
-    this.device.queue.submit([commandEncoder.finish()]);
   }
 
   resize(width: number, height: number): void {
