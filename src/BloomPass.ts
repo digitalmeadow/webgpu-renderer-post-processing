@@ -195,6 +195,7 @@ export class BloomPass extends PostPass {
   }
 
   render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     context: PostPassContext,
@@ -213,8 +214,6 @@ export class BloomPass extends PostPass {
       ]),
     );
 
-    const commandEncoder = this.device.createCommandEncoder();
-
     const gbufferView = context.geometryBuffer.metalRoughnessView;
     const emissiveView = context.geometryBuffer.emissiveView;
 
@@ -231,7 +230,7 @@ export class BloomPass extends PostPass {
       ],
     });
 
-    const thresholdPass = commandEncoder.beginRenderPass({
+    const thresholdPass = encoder.beginRenderPass({
       label: "Bloom Threshold Pass",
       colorAttachments: [
         {
@@ -265,7 +264,7 @@ export class BloomPass extends PostPass {
         ],
       });
 
-      const blurPass = commandEncoder.beginRenderPass({
+      const blurPass = encoder.beginRenderPass({
         label: `Bloom Blur Pass ${i}`,
         colorAttachments: [
           {
@@ -300,7 +299,7 @@ export class BloomPass extends PostPass {
       ],
     });
 
-    const compositePass = commandEncoder.beginRenderPass({
+    const compositePass = encoder.beginRenderPass({
       label: "Bloom Composite Pass",
       colorAttachments: [
         {
@@ -316,8 +315,6 @@ export class BloomPass extends PostPass {
     compositePass.setBindGroup(0, compositeBindGroup);
     compositePass.draw(3);
     compositePass.end();
-
-    this.device.queue.submit([commandEncoder.finish()]);
   }
 
   resize(width: number, height: number): void {
