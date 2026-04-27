@@ -27,6 +27,8 @@ export class CRTPass extends PostPass {
   private lastWidth: number = 0;
   private lastHeight: number = 0;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: CRTPassOptions = {}) {
     super();
     this.device = device;
@@ -130,15 +132,17 @@ export class CRTPass extends PostPass {
       new Uint32Array([this.options.blending ? 1 : 0, 0]), // blending + padding
     );
 
-    const bindGroup = this.device.createBindGroup({
-      label: "CRT Pass Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: { buffer: this.uniformsBuffer } },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "CRT Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: { buffer: this.uniformsBuffer } },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "CRT Render Pass",
@@ -153,7 +157,7 @@ export class CRTPass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.draw(3);
     pass.end();
 
@@ -162,5 +166,6 @@ export class CRTPass extends PostPass {
   resize(width: number, height: number): void {
     this.lastWidth = width;
     this.lastHeight = height;
+    this.bindGroup = null;
   }
 }

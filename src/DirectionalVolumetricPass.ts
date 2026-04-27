@@ -19,6 +19,9 @@ export class DirectionalVolumetricPass extends PostPass {
   private bindGroupLayout: GPUBindGroupLayout;
   private options: Required<DirectionalVolumetricPassOptions>;
 
+  private sceneBindGroup: GPUBindGroup | null = null;
+  private uniformsBindGroup: GPUBindGroup | null = null;
+
   constructor(
     device: GPUDevice,
     cameraBindGroupLayout: GPUBindGroupLayout,
@@ -97,9 +100,6 @@ export class DirectionalVolumetricPass extends PostPass {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Uniforms will be written at the start of each render() call
-
-    // Create pipeline with additive blending for volumetric light
     this.pipeline = device.createRenderPipeline({
       label: "Directional Volumetric Pass Pipeline",
       layout: device.createPipelineLayout({
@@ -140,6 +140,13 @@ export class DirectionalVolumetricPass extends PostPass {
         topology: "triangle-list",
       },
     });
+
+    // uniformsBindGroup only references this.uniformsBuffer — create once
+    this.uniformsBindGroup = device.createBindGroup({
+      label: "Directional Volumetric Pass Uniforms Bind Group",
+      layout: this.pipeline.getBindGroupLayout(3),
+      entries: [{ binding: 0, resource: { buffer: this.uniformsBuffer } }],
+    });
   }
 
   render(
@@ -159,23 +166,17 @@ export class DirectionalVolumetricPass extends PostPass {
     uniformsView.setFloat32(20, this.options.viewAnglePower, true); // f32
     this.device.queue.writeBuffer(this.uniformsBuffer, 0, uniformsArray);
 
-    // Create bind group for scene input (group 0)
-    const sceneBindGroup = this.device.createBindGroup({
-      label: "Directional Volumetric Pass Scene Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: context.geometryBuffer.depthView },
-      ],
-    });
-
-    // Create bind group for uniforms (group 3)
-    const uniformsBindGroup = this.device.createBindGroup({
-      label: "Directional Volumetric Pass Uniforms Bind Group",
-      layout: this.pipeline.getBindGroupLayout(3),
-      entries: [{ binding: 0, resource: { buffer: this.uniformsBuffer } }],
-    });
+    if (!this.sceneBindGroup) {
+      this.sceneBindGroup = this.device.createBindGroup({
+        label: "Directional Volumetric Pass Scene Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: context.geometryBuffer.depthView },
+        ],
+      });
+    }
 
     // Render pass
     const renderPass = encoder.beginRenderPass({
@@ -191,16 +192,16 @@ export class DirectionalVolumetricPass extends PostPass {
     });
 
     renderPass.setPipeline(this.pipeline);
-    renderPass.setBindGroup(0, sceneBindGroup);
+    renderPass.setBindGroup(0, this.sceneBindGroup!);
     renderPass.setBindGroup(1, context.cameraBindGroup);
     renderPass.setBindGroup(2, context.lightingBindGroup);
-    renderPass.setBindGroup(3, uniformsBindGroup);
+    renderPass.setBindGroup(3, this.uniformsBindGroup!);
     renderPass.draw(3); // Full-screen triangle
     renderPass.end();
 
   }
 
   resize(_width: number, _height: number): void {
-    // No internal render targets to resize
+    this.sceneBindGroup = null;
   }
 }

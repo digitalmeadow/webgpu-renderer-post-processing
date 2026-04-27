@@ -18,6 +18,8 @@ export class FilmGrainPass extends PostPass {
   private lastWidth: number = 0;
   private lastHeight: number = 0;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: FilmGrainPassOptions = {}) {
     super();
     this.device = device;
@@ -93,15 +95,17 @@ export class FilmGrainPass extends PostPass {
       new Float32Array([this.options.intensity, this.time, 0, 0]),
     );
 
-    const bindGroup = this.device.createBindGroup({
-      label: "Film Grain Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: { buffer: this.uniformsBuffer } },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "Film Grain Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: { buffer: this.uniformsBuffer } },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "Film Grain Pass",
@@ -116,13 +120,13 @@ export class FilmGrainPass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.draw(3);
     pass.end();
 
   }
 
-  resize(width: number, height: number): void {
-    // No render targets to resize for this pass
+  resize(_width: number, _height: number): void {
+    this.bindGroup = null;
   }
 }

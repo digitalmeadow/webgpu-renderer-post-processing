@@ -20,6 +20,8 @@ export class UpscalePass extends PostPass {
 
   private options: Required<UpscalePassOptions>;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: UpscalePassOptions = {}) {
     super();
     this.device = device;
@@ -79,14 +81,16 @@ export class UpscalePass extends PostPass {
     output: GPUTextureView,
     context: PostPassContext,
   ): void {
-    const bindGroup = this.device.createBindGroup({
-      label: "Upscale Pass Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "Upscale Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "Upscale Render Pass",
@@ -101,8 +105,12 @@ export class UpscalePass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.draw(3);
     pass.end();
+  }
+
+  resize(_width: number, _height: number): void {
+    this.bindGroup = null;
   }
 }

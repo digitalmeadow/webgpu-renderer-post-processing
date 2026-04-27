@@ -18,6 +18,8 @@ export class GodRaysPass extends PostPass {
   private bindGroupLayout: GPUBindGroupLayout;
   private options: Required<GodRaysPassOptions>;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(
     device: GPUDevice,
     cameraBindGroupLayout: GPUBindGroupLayout,
@@ -161,16 +163,18 @@ export class GodRaysPass extends PostPass {
       ]),
     );
 
-    const bindGroup = this.device.createBindGroup({
-      label: "God Rays Pass Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: context.geometryBuffer.depthView },
-        { binding: 3, resource: { buffer: this.uniformsBuffer } },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "God Rays Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: context.geometryBuffer.depthView },
+          { binding: 3, resource: { buffer: this.uniformsBuffer } },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "God Rays Render Pass",
@@ -185,7 +189,7 @@ export class GodRaysPass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.setBindGroup(1, context.cameraBindGroup);
     pass.setBindGroup(2, context.lightingBindGroup);
     pass.draw(3);
@@ -193,7 +197,7 @@ export class GodRaysPass extends PostPass {
 
   }
 
-  resize(width: number, height: number): void {
-    // No internal render targets to resize
+  resize(_width: number, _height: number): void {
+    this.bindGroup = null;
   }
 }

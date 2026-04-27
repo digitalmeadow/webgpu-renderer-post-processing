@@ -16,6 +16,8 @@ export class TonemapPass extends PostPass {
 
   private options: Required<TonemapPassOptions>;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: TonemapPassOptions = {}) {
     super();
     this.device = device;
@@ -100,15 +102,17 @@ export class TonemapPass extends PostPass {
       new Float32Array([this.options.exposure, 0, 0, 0]),
     );
 
-    const bindGroup = this.device.createBindGroup({
-      label: "Tonemap Pass Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: { buffer: this.uniformsBuffer } },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "Tonemap Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: { buffer: this.uniformsBuffer } },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "Tonemap Render Pass",
@@ -123,13 +127,13 @@ export class TonemapPass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.draw(3);
     pass.end();
 
   }
 
   resize(_width: number, _height: number): void {
-    // No internal render targets to resize
+    this.bindGroup = null;
   }
 }

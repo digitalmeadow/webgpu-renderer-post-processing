@@ -62,6 +62,8 @@ export class FilmicGradePass extends PostPass {
 
   private options: Required<FilmicGradePassOptions>;
 
+  private bindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: FilmicGradePassOptions = {}) {
     super();
     this.device = device;
@@ -211,15 +213,17 @@ export class FilmicGradePass extends PostPass {
   ): void {
     this.writeUniforms();
 
-    const bindGroup = this.device.createBindGroup({
-      label: "Filmic Grade Pass Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: input },
-        { binding: 2, resource: { buffer: this.uniformsBuffer } },
-      ],
-    });
+    if (!this.bindGroup) {
+      this.bindGroup = this.device.createBindGroup({
+        label: "Filmic Grade Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: input },
+          { binding: 2, resource: { buffer: this.uniformsBuffer } },
+        ],
+      });
+    }
 
     const pass = encoder.beginRenderPass({
       label: "Filmic Grade Render Pass",
@@ -234,13 +238,13 @@ export class FilmicGradePass extends PostPass {
     });
 
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, this.bindGroup!);
     pass.draw(3);
     pass.end();
 
   }
 
   resize(_width: number, _height: number): void {
-    // No internal render targets to resize
+    this.bindGroup = null;
   }
 }

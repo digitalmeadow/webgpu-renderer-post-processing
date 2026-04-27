@@ -33,6 +33,10 @@ export class BloomPass extends PostPass {
   private lastWidth: number = 0;
   private lastHeight: number = 0;
 
+  private cachedGbufferBindGroup: GPUBindGroup | null = null;
+  private cachedBlurBindGroups: GPUBindGroup[] = [];
+  private cachedCompositeBindGroup: GPUBindGroup | null = null;
+
   constructor(device: GPUDevice, options: BloomPassOptions = {}) {
     super();
     this.device = device;
@@ -160,6 +164,11 @@ export class BloomPass extends PostPass {
     if (this.blurTextureA) this.blurTextureA.destroy();
     if (this.blurTextureB) this.blurTextureB.destroy();
 
+    // Invalidate all cached bind groups — views are about to be recreated
+    this.cachedGbufferBindGroup = null;
+    this.cachedBlurBindGroups = [];
+    this.cachedCompositeBindGroup = null;
+
     const createTexture = (label: string, w: number, h: number) =>
       this.device.createTexture({
         label,
@@ -217,18 +226,20 @@ export class BloomPass extends PostPass {
     const gbufferView = context.geometryBuffer.metalRoughnessView;
     const emissiveView = context.geometryBuffer.emissiveView;
 
-    const gbufferBindGroup = this.device.createBindGroup({
-      label: "Bloom G-Buffer Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: gbufferView },
-        { binding: 2, resource: input },
-        { binding: 3, resource: { buffer: this.uniformsBuffer } },
-        { binding: 4, resource: input },
-        { binding: 5, resource: emissiveView },
-      ],
-    });
+    if (!this.cachedGbufferBindGroup) {
+      this.cachedGbufferBindGroup = this.device.createBindGroup({
+        label: "Bloom G-Buffer Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: gbufferView },
+          { binding: 2, resource: input },
+          { binding: 3, resource: { buffer: this.uniformsBuffer } },
+          { binding: 4, resource: input },
+          { binding: 5, resource: emissiveView },
+        ],
+      });
+    }
 
     const thresholdPass = encoder.beginRenderPass({
       label: "Bloom Threshold Pass",
@@ -243,7 +254,7 @@ export class BloomPass extends PostPass {
     });
 
     thresholdPass.setPipeline(this.thresholdPipeline);
-    thresholdPass.setBindGroup(0, gbufferBindGroup);
+    thresholdPass.setBindGroup(0, this.cachedGbufferBindGroup!);
     thresholdPass.draw(3);
     thresholdPass.end();
 
@@ -251,18 +262,20 @@ export class BloomPass extends PostPass {
     let writeView = this.blurViewA;
 
     for (let i = 0; i < this.options.iterations; i++) {
-      const blurBindGroup = this.device.createBindGroup({
-        label: `Bloom Blur Bind Group ${i}`,
-        layout: this.bindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.sampler },
-          { binding: 1, resource: gbufferView },
-          { binding: 2, resource: readView },
-          { binding: 3, resource: { buffer: this.uniformsBuffer } },
-          { binding: 4, resource: input },
-          { binding: 5, resource: emissiveView },
-        ],
-      });
+      if (!this.cachedBlurBindGroups[i]) {
+        this.cachedBlurBindGroups[i] = this.device.createBindGroup({
+          label: `Bloom Blur Bind Group ${i}`,
+          layout: this.bindGroupLayout,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: gbufferView },
+            { binding: 2, resource: readView },
+            { binding: 3, resource: { buffer: this.uniformsBuffer } },
+            { binding: 4, resource: input },
+            { binding: 5, resource: emissiveView },
+          ],
+        });
+      }
 
       const blurPass = encoder.beginRenderPass({
         label: `Bloom Blur Pass ${i}`,
@@ -277,7 +290,7 @@ export class BloomPass extends PostPass {
       });
 
       blurPass.setPipeline(this.blurPipeline);
-      blurPass.setBindGroup(0, blurBindGroup);
+      blurPass.setBindGroup(0, this.cachedBlurBindGroups[i]);
       blurPass.draw(3);
       blurPass.end();
 
@@ -286,18 +299,20 @@ export class BloomPass extends PostPass {
       writeView = temp;
     }
 
-    const compositeBindGroup = this.device.createBindGroup({
-      label: "Bloom Composite Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: gbufferView },
-        { binding: 2, resource: readView },
-        { binding: 3, resource: { buffer: this.uniformsBuffer } },
-        { binding: 4, resource: input },
-        { binding: 5, resource: emissiveView },
-      ],
-    });
+    if (!this.cachedCompositeBindGroup) {
+      this.cachedCompositeBindGroup = this.device.createBindGroup({
+        label: "Bloom Composite Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: gbufferView },
+          { binding: 2, resource: readView },
+          { binding: 3, resource: { buffer: this.uniformsBuffer } },
+          { binding: 4, resource: input },
+          { binding: 5, resource: emissiveView },
+        ],
+      });
+    }
 
     const compositePass = encoder.beginRenderPass({
       label: "Bloom Composite Pass",
@@ -312,7 +327,7 @@ export class BloomPass extends PostPass {
     });
 
     compositePass.setPipeline(this.compositePipeline);
-    compositePass.setBindGroup(0, compositeBindGroup);
+    compositePass.setBindGroup(0, this.cachedCompositeBindGroup!);
     compositePass.draw(3);
     compositePass.end();
   }
