@@ -7,6 +7,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "rootDir": "./src",
     "types": ["@webgpu/types"],
     "outDir": "./dist",
     "declaration": true,
