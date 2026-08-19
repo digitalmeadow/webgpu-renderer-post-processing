@@ -35,7 +35,7 @@
     "dev": "vite",
     "build": "vite build && tsc",
     "preview": "vite preview",
-    "publish": "npm run build && npm publish"
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "@digitalmeadow/webgpu-renderer": "^0.1.0"
