@@ -1,6 +1,6 @@
 {
   "name": "@digitalmeadow/webgpu-renderer-post-processing",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "type": "module",
   "description": "A post-processing utility for the WebGPU Renderer",
   "author": "Digital Meadow <inbox@digitalmeadow.studio> (https://digitalmeadow.studio)",
@@ -21,25 +21,27 @@
   "files": [
     "dist"
   ],
-  "main": "./dist/index.cjs",
+  "sideEffects": false,
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish": "npm run build && npm publish"
   },
-  "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "workspace:*"
+  "peerDependencies": {
+    "@digitalmeadow/webgpu-renderer": "^0.1.0"
   },
   "devDependencies": {
+    "@digitalmeadow/webgpu-renderer": "workspace:*",
     "@types/node": "26.2.0",
     "@webgpu/types": "0.1.71",
     "typescript": "7.0.2",
